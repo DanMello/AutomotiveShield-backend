@@ -1,0 +1,5 @@
+node_modules
+.gitignore
+.git
+exclude_me.txt
+deploy.sh
