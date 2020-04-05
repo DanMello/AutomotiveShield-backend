@@ -67,12 +67,14 @@ app.post('/api/login', (req, res) => {
     .findOne({"email": email}, (err, result) => {
       if (err) {
         res.json({error: true, message: 'Something went wrong trying to log you in please try again.'})
+        return;
       };
       if (result === null) {
         res.json({
           error: true, 
           message: 'Your email and password combination is invalid.'
         });
+        return;
       };
       bcrypt.compare(password, result.password, function(err, result) {
         if (err) {
@@ -80,6 +82,7 @@ app.post('/api/login', (req, res) => {
             error: true, 
             message: 'Something went wrong trying to log you in please try again.'
           });
+          return;
         };
         if (result === true) {
           const token = jwt.sign({ email: email }, tokenSecret);
@@ -95,6 +98,7 @@ app.post('/api/login', (req, res) => {
                 error: true, 
                 message: 'Something went wrong trying to log you in please try again.'
               });
+              return;
             };
             res.json({
               message: 'You have logged in successfully you will now be redirected.',
@@ -103,6 +107,7 @@ app.post('/api/login', (req, res) => {
           });
         } else {
           res.json({error: true, message: 'Your email and password combination is invalid.'})
+          return;
         };
       });
     });
@@ -189,6 +194,135 @@ app.post('/api/checkToken', (req, res) => {
         message: err.message
       });
     });
+  });
+});
+
+app.post('/api/getUser', (req, res) => {
+  const { token } = req.body;
+  jwt.verify(token, tokenSecret, function(err, decoded) {
+    if (err) {
+      res.json({
+        error: true,
+        message: err.message
+      });
+      return;
+    }
+    const { email } = decoded;
+    res.json({email});
+  });
+});
+
+app.post('/api/updateemail', (req, res) => {
+
+  const {token, email, password} = req.body;
+
+  function verifiedToken() {
+    return new Promise((resolve, reject) => {
+      jwt.verify(token, tokenSecret, function(err, decoded) {
+        if (err) {
+          reject(err);
+        };
+        console.log('token decoded')
+        resolve(decoded.email);
+      });
+    });
+  };
+
+  function findUserAndGetPassword(decodedEmail) {
+    return new Promise((resolve, reject) => {
+      connection.then(client => {
+        client
+        .db("automotiveshield")
+        .collection("users")
+        .findOne({"email": decodedEmail}, (err, result) => {
+          if (err) reject(err);
+          console.log('user found')
+          resolve(result.password);
+        })
+      });
+    })
+  };
+
+  function verifyPassword(storedPassword) {
+    return new Promise((resolve, reject) => {
+      bcrypt.compare(password, storedPassword, function(err, result) {
+        if (err) reject(err)
+        if (result === true) {
+          console.log('password verified')
+          resolve();
+        } else {
+          reject(new Error('The password you entered does not match our records.'))
+        };
+      });
+    });
+  };
+
+  function updateEmail(decodedEmail) {
+    return new Promise((resolve, reject) => {
+      connection.then(client => {
+        client
+        .db("automotiveshield")
+        .collection("users")
+        .updateOne({email: decodedEmail}, {$set: {"email": email}}, (err, result) => {
+          if (err || result === null) reject(new Error('Something when wrong updating your email please try again.'));
+          resolve();
+        });
+      });
+    });
+  };
+
+  function deleteCurrentToken() {
+    return new Promise((resolve, reject) => {
+      connection.then(client => {
+        client
+        .db("automotiveshield")
+        .collection("tokens")
+        .deleteOne({token: token}, (err, result) => {
+          if (err || result === null) reject(new Error('Something went wrong removing your login token from database but dont worry it will automatically be deleted in 24 hours.'));
+          resolve();
+        });
+      });
+    });
+  };
+
+  function createNewToken () {
+    const newToken = jwt.sign({ email: email }, tokenSecret);
+    return new Promise((resolve, reject) => {
+      connection.then(client => {
+        client
+        .db("automotiveshield")
+        .collection("tokens")
+        .insertOne({
+          token: newToken,
+          activeAt: new Date()
+        }, (err, result) => {
+          if (err) reject(new Error('Something went wrong updating your log in token. Please try logging in with your new email.'));
+          resolve(newToken);
+        });
+      });
+    });
+  };
+
+  async function runAsync() {
+    const decodedEmail = await verifiedToken();
+    const storedPassword = await findUserAndGetPassword(decodedEmail);
+    const passwordVerified = await verifyPassword(storedPassword);
+    const emailUpdated = await updateEmail(decodedEmail);
+    const tokenDeleted = await deleteCurrentToken();
+    const newToken = await createNewToken();
+
+    res.json({
+      token: newToken,
+      email: email,
+      message: 'Email updated successfully'
+    });
+  };
+
+  runAsync().catch(err => {
+    res.json({
+      error: true,
+      message: err.message
+    })
   });
 });
 
