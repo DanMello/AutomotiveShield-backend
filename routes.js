@@ -7,4 +7,5 @@ exports = module.exports = function (app) {
   app.get('/contact', require('./serverSideRendering').init)
   app.get('/admin', require('./serverSideRendering').init)
   app.get('/adminPanel', require('./serverSideRendering').init)
+  app.get('/uploadpost', require('./serverSideRendering').init)
 };
