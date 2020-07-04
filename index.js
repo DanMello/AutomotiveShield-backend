@@ -362,6 +362,88 @@ app.post('/api/updateemail', (req, res) => {
   });
 });
 
+app.post('/api/changepassword', (req, res) => {
+
+  const {token, password, currentPassword} = req.body;
+
+  function verifiedToken() {
+    return new Promise((resolve, reject) => {
+      jwt.verify(token, tokenSecret, function(err, decoded) {
+        if (err) {
+          reject(err);
+        };
+        resolve(decoded.email);
+      });
+    });
+  };
+
+  function findUserAndGetPassword(decodedEmail) {
+    return new Promise((resolve, reject) => {
+      connection.then(client => {
+        client
+        .db("automotiveshield")
+        .collection("users")
+        .findOne({"email": decodedEmail}, (err, result) => {
+          if (err) reject(err);
+          console.log('user found')
+          resolve(result.password);
+        })
+      });
+    })
+  };
+
+  function verifyPassword(storedPassword) {
+    return new Promise((resolve, reject) => {
+      bcrypt.compare(currentPassword, storedPassword, function(err, result) {
+        if (err) reject(err)
+        if (result === true) {
+          console.log('password verified')
+          resolve();
+        } else {
+          reject(new Error('The current password you entered does not match our records.'))
+        };
+      });
+    });
+  };
+
+  function updatePassword(decodedEmail) {
+    return new Promise((resolve, reject) => {
+      bcrypt.genSalt(10, function(err, salt) {
+        bcrypt.hash(password, salt, function(err, hash) {
+          if (err) reject(err);
+          connection.then(client => {
+            client
+            .db("automotiveshield")
+            .collection("users")
+            .updateOne({email: decodedEmail}, {$set: {"password": hash}}, (err, result) => {
+              if (err || result === null) reject(new Error('Something when wrong updating your password please try again.'));
+              resolve();
+            });
+          });
+        });
+      });
+    });
+  };
+
+  async function runAsync() {
+    const decodedEmail = await verifiedToken();
+    const storedPassword = await findUserAndGetPassword(decodedEmail);
+    const passwordVerified = await verifyPassword(storedPassword);
+    await updatePassword(decodedEmail);
+
+    res.json({
+      message: 'Password updated successfully'
+    });
+  };
+
+  runAsync().catch(err => {
+    res.json({
+      error: true,
+      message: err.message
+    })
+  });
+});
+
 app.post('/api/updateservice', (req, res) => {
   
   const { token, service, newService } = req.body;
@@ -465,7 +547,7 @@ app.post('/api/addnewservice', (req, res) => {
 });
 
 app.post('/api/deleteservice', (req, res) => {
-  
+
   const { token, service } = req.body;
 
   function verifiedToken() {
@@ -963,9 +1045,40 @@ app.get('/api/cars', (req, res) => {
 
 app.get('/api/searchwork', (req, res) => {
   const search = req.query.search;
+  const limit = parseInt(req.query.limit);
+  const skip = parseInt(req.query.skip);
   let date = Date.parse(search) ? new Date(search) : null;
   let nextDay = Date.parse(search) ? new Date(new Date(search).setDate(date.getDate() + 1)) : null;
   function getCars() {
+    return new Promise((resolve, reject) => {
+      connection.then(client => {
+        client
+        .db("automotiveshield")
+        .collection("cars")
+        .find({
+          $or:[
+            {"service": {$regex : `(?i)^${search}`}},
+            {"car": {$regex : `^(?i)${search}`}},
+            {"description": {$regex : `(?i)^${search}`}},
+            {"date": {"$gte": date, "$lt": nextDay}}
+          ]
+        })
+        .sort({"date": -1})
+        .limit(limit)
+        .skip(skip)
+        .toArray((err, array) => {
+          if (err) {
+            reject(err);
+          };
+          resolve(array);
+        })
+      }).catch(err => {
+        reject(err);
+      });
+    });
+  };
+
+  function getCount() {
     return new Promise((resolve, reject) => {
       connection.then(client => {
         client
@@ -994,9 +1107,10 @@ app.get('/api/searchwork', (req, res) => {
 
   async function runAsync() {
     const cars = await getCars();
+    const count = await getCount();
     res.json({
       cars,
-      count: cars.length
+      count: count.length
     });
   };
 
