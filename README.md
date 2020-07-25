@@ -10,7 +10,7 @@
 
 3. Learned how to use json web tokens to authenticate and authorize the user and create sessions using local storage in the front-end.
 
-4. Learned how more about querying data with mongoDB, and organizing data by dates.
+4. Learned more about querying data with mongoDB, and organizing data by dates.
 
 5. Learned a lot more about organizing my code by combining async await and promises so you don't have to write code with a ton of callbacks.
 
