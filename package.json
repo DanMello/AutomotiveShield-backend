@@ -12,7 +12,7 @@
     "@ffmpeg-installer/ffmpeg": "^1.0.13",
     "bcrypt": "^4.0.1",
     "dotenv": "^8.2.0",
-    "express": "^4.17.1",
+    "express": "^4.17.3",
     "ffmpeg": "0.0.4",
     "fluent-ffmpeg": "^2.1.2",
     "jimp": "^0.10.1",
